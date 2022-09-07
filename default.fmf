@@ -1,0 +1,5 @@
+FTEMANIFEST  1
+NAME         Daggerlicious
+BASEGAME     core
+BASEGAME     _dl-side
+BASEGAME     _dl-main
