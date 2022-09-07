@@ -1,0 +1,158 @@
+/*
+================
+drawCrossHair
+draw the crosshair, for ease of aiming. also display tile information, if we're aiming at one that is.
+================
+*/
+void(vector screenSize) drawCrossHair =
+{
+    decimal crossHairSize = (fieldActive & activeModifier) ? 2 : 1;
+
+    drawLine([screenSize.x / 2 - 1 * crossHairSize, screenSize.y / 2 - 4 * crossHairSize], '2 8' * crossHairSize, '1 1 1', 1, 0);
+    drawLine([screenSize.x / 2 - 4 * crossHairSize, screenSize.y / 2 - 1 * crossHairSize], '8 2' * crossHairSize, '1 1 1', 1, 0);
+
+    if (entityMain)
+    {
+        string  stringTileA = entityMain.fieldTileXY;
+        decimal lengthTileA = stringOffSet(stringTileA, 0, '16 16') / 2;
+        string  stringTileB = (fieldActive & activeTileType) ? fieldNumber : stringFormat("%.2f", entityMain.fieldPoint.z / 5.5);
+        decimal lengthTileB = stringOffSet(stringTileB, 0, '16 16') / 2;
+        string  stringTileC = stringFormat("%.2f", fieldBuffer / 5.5);
+        decimal lengthTileC = stringOffSet(stringTileC, 0, '16 16') / 2;
+        drawText([screenSize.x / 2 - lengthTileA, screenSize.y / 2 + 8],  stringTileA, '16 16', '1 1 1', 1.0, 0);
+        drawText([screenSize.x / 2 - lengthTileB, screenSize.y / 2 + 24], stringTileB, '16 16', '1 1 1', (fieldActive & activeTileType) ? bound(0.5, sin(time * 10), 1) : 1, 0);
+        drawText([screenSize.x / 2 - lengthTileC, screenSize.y / 2 + 40], stringTileC, '16 16', '1 1 1', 0.5, 0);
+    }
+};
+
+/*
+================
+drawDagger
+draw the race dagger according to the current map race dagger X and Y value. Z is done by tracing the tile below, then getting the tile's height and adding some padding.
+================
+*/
+decimal() drawDagger =
+{
+    // if the map game mode is race
+    if (consoleVariable(dlMapGameMode, 0) == 2)
+    {
+        // do the trace
+        traceBegin(self.fieldPoint, self.fieldPoint - '0 0 8192', 0, self);
+
+        // spin and calculate origin
+        self.fieldAngle.y += frameTime * 50;
+        self.fieldPoint.x = 800 + (8 * consoleVariable(dlMapRaceDaggerY, 0));
+        self.fieldPoint.y = 800 + (8 * consoleVariable(dlMapRaceDaggerX, 0));
+        self.fieldPoint.z = sin(time) * 2.5 + traceEntity.fieldPoint.z + 36;
+
+        // add to scene
+        sceneEntityAdd(self);
+    }
+
+    return 1;
+};
+
+/*
+================
+drawTile
+draw the game's level, basically...
+================
+*/
+decimal() drawTile =
+{
+    // draw special polygon if player is hovering over tile, regular tile model otherwise
+    if (entityMain == self || self.fieldTileMark)
+    {
+        // flash if player is hovering over tile but not locking it, solid otherwise
+        decimal tileAlpha = (fieldActive & activeTileLock) ? 1 : bound(0.25, sin(time * 10), 1);
+        vector  tileColor = '0 0 1';
+
+        // instant shrink
+        if (self.fieldPoint.z / 5.5 < -1.0)
+            tileColor = '0 1 0';
+
+        // void
+        if (self.fieldPoint.z / 5.5 < -1.1)
+            tileColor = '1 0 0';
+
+        // mark
+        if (self.fieldTileMark)
+            tileColor = '1 0 1';
+
+        // mark and active
+        if (self.fieldTileMark && entityMain == self)
+            tileColor = '0 1 0';
+
+        // top polygon
+        polygonBegin("", 1024);
+        polygonPoint(self.origin - '15 15 0' + '0  0  18', '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 0' + '30 0  18', '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 0' + '30 30 18', '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 0' + '0  30 18', '1 1', tileColor, tileAlpha);
+        polygonClose();
+
+        // front polygon
+        polygonPoint(self.origin - '15 15 4078' + '0 0 4096',  '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 4078' + '0 0 0',     '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 4078' + '0 30 0',    '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 4078' + '0 30 4096', '1 1', tileColor, tileAlpha);
+        polygonClose();
+
+        // back polygon
+        polygonPoint(self.origin - '-15 15 4078' + '0 0 4096',  '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '-15 15 4078' + '0 0 0',     '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '-15 15 4078' + '0 30 0',    '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '-15 15 4078' + '0 30 4096', '1 1', tileColor, tileAlpha);
+        polygonClose();
+
+        // left polygon
+        polygonPoint(self.origin - '15 15 4078' + '0 0 4096',  '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 4078' + '30 0 4096', '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 4078' + '30 0 0',    '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 15 4078' + '0 0 0',     '1 1', tileColor, tileAlpha);
+        polygonClose();
+
+        // right polygon
+        polygonPoint(self.origin - '15 -15 4078' + '0 0 4096',  '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 -15 4078' + '30 0 4096', '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 -15 4078' + '30 0 0',    '1 1', tileColor, tileAlpha);
+        polygonPoint(self.origin - '15 -15 4078' + '0 0 0',     '1 1', tileColor, tileAlpha);
+        polygonClose();
+    }
+    else
+    {
+        // don't draw if it's a void tile
+        if (self.fieldPoint.z / 5.5 > -1.1)
+        {
+            self.fieldBody = getBody(bodyB);
+            self.fieldSkin = getSkin(skinB);
+            sceneEntityAdd(self);
+            self.fieldBody = getBody(bodyC);
+            self.fieldSkin = getSkin(skinC);
+            sceneEntityAdd(self);
+        }
+    }
+
+    return 1;
+};
+
+/*
+================
+drawGem
+draw the gem, as a visual hint of where the player will spawn in game.
+================
+*/
+decimal() drawGem =
+{
+    // do the trace
+    traceBegin(self.fieldPoint, self.fieldPoint - '0 0 8192', 0, self);
+
+    // spin and calculate origin
+    self.fieldAngle.y += frameTime * 50;
+    self.fieldPoint.z  = traceEntity.fieldPoint.z + 28;
+
+    // add to scene
+    sceneEntityAdd(self);
+
+    return 1;
+};

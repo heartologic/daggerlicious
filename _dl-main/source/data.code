@@ -1,0 +1,489 @@
+/*
+================
+dataWipe
+remove every tile from the map, usually for creation and loading of a new map. should reset the player's data as well, like origin, angle, velocity, etc.
+================
+*/
+void() dataWipe =
+{
+    entityPlayer.fieldAngle = '0 0 0';
+    entityPlayer.fieldSpeed = '0 0 0';
+    sceneSet(propertyInput, '0 0 0');
+    fieldActive = 0;
+    fieldBuffer = 0;
+
+    for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+        if (loop.fieldName == "tile" || loop.fieldName == "enemy")
+            entityClose(loop);
+};
+
+/*
+================
+dataSave
+save a given binary file in the "data/" folder.
+================
+*/
+void(string path) dataSave =
+{
+    file    mapFile        = fileBegin(path, 2);
+    integer mapOffSet      = 0;
+    decimal mapDecimalData = 0;
+    integer mapIntegerData = 0;
+
+    // spawn version
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 6;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // world version
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 9;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // shrink close radius
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapShrinkCloseRadius");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // shrink begin radius
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapShrinkBeginRadius");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // shrink rate
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapShrinkRate");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // brightness
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapBrightness");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // game mode
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = getConsoleVariableA("dlMapGameMode");
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // arena dimension
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 51;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // unknown
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 1;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    fileIndex(mapFile, mapOffSet);
+
+    // write the arena buffer, loop every map tile. divide height by 5.5 as 1 quake unit =/= 1 dd unit.
+    for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+    {
+        if (loop.fieldName == "tile")
+        {
+            mapDecimalData = loop.fieldPoint.z / 5.5;
+            fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+            mapOffSet += 4i;
+            fileIndex(mapFile, mapOffSet);
+        }
+    }
+
+    // race dagger x
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapRaceDaggerX");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // race dagger y
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapRaceDaggerY");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // unknown
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 0;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // unknown
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 1;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // dagger 4 unlock time
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 500;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // dagger 3 unlock time
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 250;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // dagger 2 unlock time
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 120;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // dagger 1 unlock time
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 60;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // unknown
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = 0;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // spawn count
+    integer spawnCount = 0;
+
+    for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+        if (loop.fieldName == "enemy")
+            spawnCount++;
+
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = spawnCount;
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+    {
+        if (loop.fieldName == "enemy")
+        {
+            // enemy type
+            fileIndex(mapFile, mapOffSet);
+            mapIntegerData = loop.fieldType;
+
+            // remap the enemy type
+            switch(mapIntegerData)
+            {
+                // centipede case
+                case 4:
+                    mapIntegerData = 2;
+                    break;
+                // spider i case
+                case 7:
+                    mapIntegerData = 3;
+                    break;
+                // leviathan case
+                case 3:
+                    mapIntegerData = 4;
+                    break;
+                // squid iii case
+                case 2:
+                    mapIntegerData = 6;
+                    break;
+                // thorn case
+                case 9:
+                    mapIntegerData = 7;
+                    break;
+                // ghostpede case
+                case 6:
+                    mapIntegerData = 9;
+                    break;
+                // empty case
+                case 10:
+                    mapIntegerData = 255;
+                    break;
+            }
+
+            fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+            mapOffSet += 4i;
+
+            // enemy delay
+            fileIndex(mapFile, mapOffSet);
+            mapDecimalData = loop.fieldTime;
+            fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+            mapOffSet += 4i;
+
+            // unknown
+            fileIndex(mapFile, mapOffSet);
+            mapIntegerData = 0;
+            fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+            mapOffSet += 4i;
+
+            // unknown
+            fileIndex(mapFile, mapOffSet);
+            mapIntegerData = 3;
+            fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+            mapOffSet += 4i;
+
+            // unknown
+            fileIndex(mapFile, mapOffSet);
+            mapIntegerData = 0;
+            fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+            mapOffSet += 4i;
+
+            // unknown
+            fileIndex(mapFile, mapOffSet);
+            mapIntegerData = 1106247680;
+            fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+            mapOffSet += 4i;
+
+            // unknown
+            fileIndex(mapFile, mapOffSet);
+            mapIntegerData = 10;
+            fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+            mapOffSet += 4i;
+        }
+    }
+
+    // initial hand
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = getConsoleVariableA("dlMapInitialHand");
+    fileWrite(mapFile, (void*)&mapIntegerData, 1);
+    mapOffSet += 1i;
+
+    // gem offset
+    fileIndex(mapFile, mapOffSet);
+    mapIntegerData = getConsoleVariableA("dlMapGemOffSet");
+    fileWrite(mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    mapOffSet += 4i;
+
+    // gem offset
+    fileIndex(mapFile, mapOffSet);
+    mapDecimalData = getConsoleVariableA("dlMapTimeOffSet");
+    fileWrite(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    mapOffSet += 4i;
+
+    // close the file
+    fileClose(mapFile);
+};
+
+/*
+================
+dataLoad
+load a given binary file in the "data/" folder.
+================
+*/
+void(string path) dataLoad =
+{
+    file    mapFile        = fileBegin(path, 0);
+    integer mapOffSet      = 0;
+    decimal mapDecimalData = 0;
+    integer mapIntegerData = 0;
+
+    // spawn version
+    mapOffSet += 4i;
+
+    // world version
+    mapOffSet += 4i;
+
+    // shrink close radius
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapShrinkCloseRadius", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // shrink begin radius
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapShrinkBeginRadius", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // shrink rate
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapShrinkRate", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // brightness
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapBrightness", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // game mode
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    setConsoleVariable("dlMapGameMode", integerString(mapIntegerData));
+    mapOffSet += 4i;
+
+    // arena dimension
+    mapOffSet += 4i;
+
+    // unknown
+    mapOffSet += 4i;
+
+    fileIndex(mapFile, mapOffSet);
+
+    // read the arena buffer, spawn every map tile. multiply height by 5.5 as 1 dd unit =/= 1 quake unit.
+    for (integer a = 0; a < 2601; a++)
+    {
+        fileRead(mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+
+        entity tile      = entityBegin();
+        tile.fieldName   = "tile";
+        tile.fieldPoint  = [32 * (a / 51i), 32 * (a % 51i), mapDecimalData * 5.5];
+        tile.fieldSolid  = 2;
+        tile.fieldTileXY = stringFormat("%ix%i", a % 51i, a / 51i);
+        tile.fieldAngle  = [0, 90 * (a % 4i), 0];
+        tile.fieldMask   = 1;
+        tile.fieldDraw   = drawTile;
+        tile.fieldScale  = 8;
+        sizeSet(tile, '-16 -16 -8192', '16 16 18');
+
+        if (tile.fieldTileXY == "25x25")
+            entityPlayer.fieldPoint = tile.fieldPoint + '0 0 26';
+
+        mapOffSet += 4i;
+        fileIndex(mapFile, mapOffSet);
+    }
+
+    // race dagger x
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapRaceDaggerX", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // race dagger y
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapRaceDaggerY", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // unknown
+    mapOffSet += 4i;
+
+    // unknown
+    mapOffSet += 4i;
+
+    // dagger 4 unlock time
+    mapOffSet += 4i;
+
+    // dagger 3 unlock time
+    mapOffSet += 4i;
+
+    // dagger 2 unlock time
+    mapOffSet += 4i;
+
+    // dagger 1 unlock time
+    mapOffSet += 4i;
+
+    // unknown
+    mapOffSet += 4i;
+
+    integer spawnCount;
+
+    // spawn count
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    spawnCount = mapIntegerData;
+    mapOffSet += 4i;
+
+    for (integer a = 0; a < spawnCount; a++)
+    {
+        entity enemy = entityBegin();
+        enemy.fieldName = "enemy";
+
+        // enemy type
+        fileIndex(mapFile, mapOffSet);
+        fileRead (mapFile, (void*)&mapIntegerData, 1);
+
+        // remap the enemy type
+        switch(mapIntegerData)
+        {
+            // centipede case
+            case 2:
+                mapIntegerData = 4;
+                break;
+            // spider i case
+            case 3:
+                mapIntegerData = 7;
+                break;
+            // leviathan case
+            case 4:
+                mapIntegerData = 3;
+                break;
+            // squid iii case
+            case 6:
+                mapIntegerData = 2;
+                break;
+            // thorn case
+            case 7:
+                mapIntegerData = 9;
+                break;
+            // ghostpede case
+            case 9:
+                mapIntegerData = 6;
+                break;
+            // empty case
+            case 255:
+                mapIntegerData = 10;
+                break;
+        }
+
+        enemy.fieldType = mapIntegerData;
+        mapOffSet += 4i;
+
+        // enemy delay
+        fileIndex(mapFile, mapOffSet);
+        fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+        enemy.fieldTime = mapDecimalData;
+        mapOffSet += 4i;
+
+        // unknown
+        mapOffSet += 4i;
+
+        // unknown
+        mapOffSet += 4i;
+
+        // unknown
+        mapOffSet += 4i;
+
+        // unknown
+        mapOffSet += 4i;
+
+        // unknown
+        mapOffSet += 4i;
+    }
+
+    // have at least one enemy
+    if (!spawnCount)
+    {
+        entity enemy = entityBegin();
+        enemy.fieldName = "enemy";
+        enemy.fieldType = 10;
+        enemy.fieldTime = 0;
+        mapOffSet += 4i;
+    }
+
+    // initial hand
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapIntegerData, 1);
+    setConsoleVariable("dlMapInitialHand", integerString(mapIntegerData));
+    mapOffSet += 1i;
+
+    // gem offset
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapIntegerData, sizeof(mapIntegerData));
+    setConsoleVariable("dlMapGemOffSet", integerString(mapIntegerData));
+    mapOffSet += 4i;
+
+    // time offset
+    fileIndex(mapFile, mapOffSet);
+    fileRead (mapFile, (void*)&mapDecimalData, sizeof(mapDecimalData));
+    setConsoleVariable("dlMapTimeOffSet", decimalString(mapDecimalData));
+    mapOffSet += 4i;
+
+    // close the file
+    fileClose(mapFile);
+};

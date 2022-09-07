@@ -1,0 +1,5 @@
+void() CSQC_WorldLoaded                                                    = { mainLife (); };
+void(float vwidth, float vheight, float notmenu) CSQC_UpdateView           = { mainView ([vwidth, vheight]); };
+void() CSQC_Input_Frame                                                    = { mainInput(); };
+float(float evtype, float scanx, float chary, float devid) CSQC_InputEvent = { return mainEvent  (evtype, scanx, chary); };
+float(string cmd) CSQC_ConsoleCommand                                      = { return mainCommand(cmd); };

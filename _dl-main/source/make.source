@@ -1,0 +1,11 @@
+#define CSQC
+#output "../csprogs.dat"
+#includelist
+engine.code
+define.code
+draw.code
+data.code
+side.code
+main.code
+wrap.code
+#endlist

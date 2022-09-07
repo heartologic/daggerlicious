@@ -1,0 +1,174 @@
+#define variant            __variant
+#define integer            int
+#define decimal            float
+#define file               filestream
+#define search             searchhandle
+#define buffer             strbuf
+#define characterString    chr2str
+#define decimalString      ftos
+#define decimalRound       rint
+#define decimalBound       bound
+#define integerString      itos
+#define stringDecimal      stof
+#define stringInteger      stoi
+#define stringVector       stov
+#define stringFormat       sprintf
+#define stringDivide       substring
+#define stringOffSet       stringwidth
+#define stringLength       strlen
+#define entityNext         nextent
+#define sceneClose         clearscene
+#define sceneBegin         renderscene
+#define sceneSet           setproperty
+#define sceneGet           getproperty
+#define sceneEntityAdd     addentity
+#define sceneEntityAll     addentities
+#define sceneLight         dynamiclight_add
+#define propertyWorld      VF_DRAWWORLD
+#define propertyStatusBar  VF_DRAWENGINESBAR
+#define propertyCrossHair  VF_DRAWCROSSHAIR
+#define propertyRender     VF_RT_DESTCOLOUR
+#define propertyPoint      VF_ORIGIN
+#define propertyAngle      VF_ANGLES
+#define propertyField      VF_FOV
+#define propertySizeX      VF_SIZE_X
+#define propertySizeY      VF_SIZE_Y
+#define propertyInput      VF_CL_VIEWANGLES
+#define clipBegin          drawsetcliparea
+#define clipClose          drawresetcliparea
+#define polygonBegin       R_BeginPolygon
+#define polygonPoint       R_PolygonVertex
+#define polygonClose       R_EndPolygon
+#define entityBegin        spawn
+#define entityClose        remove
+#define fieldName          classname
+#define fieldPoint         origin
+#define fieldAngle         angles
+#define fieldSpeed         velocity
+#define fieldSolid         solid
+#define fieldScale         scale
+#define fieldMask          drawmask
+#define fieldDraw          predraw
+#define fieldBody          modelindex
+#define fieldSkin          forceshader
+#define tokenSet           tokenizebyseparator
+#define tokenGet           argv
+#define sizeSet            setsize
+#define viewSet            makevectors
+#define viewX              v_forward
+#define viewY              v_right
+#define viewZ              v_up
+#define traceBegin         traceline
+#define traceEntity        trace_ent
+#define drawIcon           drawpic
+#define drawText           drawstring
+#define drawLine           drawfill
+#define drawRotation       drawrotpic
+#define getBody            getmodelindex
+#define getSkin            shaderforname
+#define fileBegin          fopen
+#define fileClose          fclose
+#define fileWrite          fwrite
+#define fileRead           fread
+#define fileIndex          fseek
+#define searchBegin         search_begin
+#define searchClose         search_end
+#define searchFile          search_getfilename
+#define dataShrinkClose     2
+#define dataShrinkBegin     3
+#define dataShrinkRate      4
+#define dataBrightness      5
+#define dataGameMode        6
+#define dataRaceDaggerX     9
+#define dataRaceDaggerY     10
+#define dataInitialHand     19
+#define dataGemOffSet       20
+#define dataTimeOffSet      21
+#define frameTime           frametime
+#define getConsoleVariableA cvar
+#define getConsoleVariableB cvar_string
+#define setConsoleVariable  cvar_set
+#define consoleVariable     autocvar
+#define consoleCommand      localcmd
+#define inputAngle          input_angles
+#define inputMove           input_movevalues
+#define inputButton         input_buttons
+#define eventKeyBegin       IE_KEYDOWN
+#define eventKeyClose       IE_KEYUP
+#define eventMouseDelta     IE_MOUSEDELTA
+#define eventMouseAbsolute  IE_MOUSEABS
+#define eventKeyEscape      K_ESCAPE
+#define eventKeyBackSpace   K_BACKSPACE
+#define eventKeySpace       K_SPACE
+#define eventKeyControlA    K_LCTRL
+#define eventKeyControlB    K_RCTRL
+#define eventKeyMouseA      K_MOUSE1
+#define eventKeyMouseB      K_MOUSE2
+#define eventKeyMouseC      K_MOUSE3
+#define eventKeyWheelA      K_MWHEELUP
+#define eventKeyWheelB      K_MWHEELDOWN
+#define eventKeyArrowA      K_LEFTARROW
+#define eventKeyArrowB      K_RIGHTARROW
+#define eventKeyArrowC      K_UPARROW
+#define eventKeyArrowD      K_DOWNARROW
+#define eventKeyMoveA       97
+#define eventKeyMoveB       100
+#define eventKeyMoveC       119
+#define eventKeyMoveD       115
+#define cursorMode          setcursormode
+#define cursorPoint         setmousepos
+#define activeTileLock      1
+#define activeTileType      2
+#define activeModifier      4
+#define activeView          8
+#define fontType            drawfont
+#define fontMake            loadfont
+#define windowTitle         setwindowcaption
+#define functionIs          isfunction
+#define functionDo          callfunction
+#define bodyA               "Models/dagger.obj"
+#define bodyB               "Models/tile.obj"
+#define bodyC               "Models/pillar.obj"
+#define bodyD               "Models/gib.obj"
+#define skinA               "dagger", "{\n"\
+                                          "{\n"\
+                                              "map Textures/dagger.png\n"\
+                                              "rgbGen lightingDiffuse\n"\
+                                          "}\n"\
+                                      "}\n"\
+
+#define skinB               "tile", "{\n"\
+                                          "{\n"\
+                                              "map Textures/tile.png\n"\
+                                              "rgbGen lightingDiffuse\n"\
+                                          "}\n"\
+                                      "}\n"\
+
+#define skinC               "pillar", "{\n"\
+                                          "{\n"\
+                                              "map Textures/pillar.png\n"\
+                                              "rgbGen lightingDiffuse\n"\
+                                          "}\n"\
+                                      "}\n"\
+
+#define skinD               "gib",    "{\n"\
+                                          "{\n"\
+                                              "map Textures/gib.png\n"\
+                                              "rgbGen lightingDiffuse\n"\
+                                          "}\n"\
+                                      "}\n"\
+
+class      sideObject;
+entity     entityPlayer;
+entity     entityMain;
+sideObject entitySide;
+integer    sideLock;
+integer    sideActive;
+vector     sideCursor;
+.string    fieldTileXY;
+.integer   fieldTileMark;
+.integer   fieldType;
+.decimal   fieldTime;
+string     fieldNumber;
+integer    fieldActive;
+decimal    fieldBuffer;

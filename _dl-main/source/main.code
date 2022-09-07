@@ -1,0 +1,327 @@
+/*
+================
+mainLife
+initialize everything we'll need. spawn the player, and put them in tile 25x25, just like the game.
+================
+*/
+void() mainLife =
+{
+    // spawn player
+    entityPlayer = entityBegin();
+
+    // spawn race dagger
+    entity dagger     = entityBegin();
+    dagger.fieldAngle = '0 0 -90';
+    dagger.fieldMask  = 1;
+    dagger.fieldDraw  = drawDagger;
+    dagger.fieldBody  = getBody(bodyA);
+    dagger.fieldSkin  = getSkin(skinA);
+    dagger.fieldScale = 64;
+
+    // spawn player gem
+    entity gem     = entityBegin();
+    gem.fieldPoint = '800 800 0';
+    gem.fieldMask  = 1;
+    gem.fieldDraw  = drawGem;
+    gem.fieldBody  = getBody(bodyD);
+    gem.fieldSkin  = getSkin(skinD);
+    gem.fieldScale = 16;
+
+    // set the font and start a new map
+    fontType = fontMake("", "goethebold.ttf", "12 16", -1);
+    consoleCommand     ("dlMapName survival; dataLoad _survival; dlToggle; dlSide sideMain\n");
+};
+
+/*
+================
+mainView
+the main loop for 3D/2D rendering.
+================
+*/
+void(vector screenSize) mainView =
+{
+    // calculate the aspect ratio to accurately portray a dd map.
+    //vector vectorField = (fieldActive & activeView) ? [decimalRound(screenSize.x / 160) * 10 + 75 * 0.75, 90 * 0.75] : [decimalRound(screenSize.x / 160) * 10 + 90 * 0.75, 90 * 0.75];
+
+    // clear the scene, set every property, add every entity, and render
+    drawLine      ('0 0', screenSize, '0 0 0', 1, 0);
+    sceneClose    ();
+    sceneSet      (propertyWorld,     0);
+    sceneSet      (propertyStatusBar, 0);
+    sceneSet      (propertyCrossHair, 0);
+    sceneSet      (propertyPoint,     (fieldActive & activeView) ? '800 800 566' : entityPlayer.fieldPoint);
+    sceneSet      (propertyAngle,     (fieldActive & activeView) ? '90 180 0'    : entityPlayer.fieldAngle);
+    sceneSet      (propertyField,     [decimalRound(screenSize.x / 160) * 10 + 90 * 0.825, 90 * 0.75]);
+    sceneEntityAll(1);
+    sceneLight    ('800 800 26', getConsoleVariableA("dlMapBrightness") * 5.5, '1 0.535 0.100');
+    sceneBegin    ();
+
+    // draw the crosshair if we're not in the side bar and not in the top down view
+    if (!sideActive && !(fieldActive & activeView))
+        drawCrossHair(screenSize);
+
+    // draw the side bar
+    if (sideActive)
+    {
+        // force the current side object to be world, in case we're not hovering over anything.
+        if (!sideLock)
+            entitySide = (sideObject)world;
+
+        // background
+        drawLine('0 0', [screenSize.x / 2, screenSize.y], '0 0 0', 0.5, 0);
+
+        // loop through every frame object
+        for (sideObject loop = (sideObject)entityNext(world); loop; loop = (sideObject)entityNext(loop))
+            if (loop.fieldName == "frame")
+                loop.sideShow();
+    }
+};
+
+/*
+================
+mainMove
+handle player movement.
+================
+*/
+void(decimal input, .decimal field, integer speed, vector view = '0 0 0') mainMove =
+{
+    // if player is moving up or down, increase speed
+    if (input > 0)
+        entityPlayer.field += frameTime * speed * 8;
+    if (input < 0)
+        entityPlayer.field -= frameTime * speed * 8;
+
+    // if player is not moving, decrease speed
+    if (!input)
+    {
+        if (entityPlayer.field > 0)
+            entityPlayer.field -= frameTime * +entityPlayer.field * speed * 4;
+        if (entityPlayer.field < 0)
+            entityPlayer.field += frameTime * -entityPlayer.field * speed * 4;
+    }
+
+    // bind the player speed
+    entityPlayer.field = bound(-speed, entityPlayer.field, speed);
+
+    // don't use the view vector if we don't need it (mainly for z axis movement)
+    if (view)
+        entityPlayer.fieldPoint   += view * entityPlayer.field;
+    else
+        entityPlayer.fieldPoint.z += entityPlayer.field;
+};
+
+/*
+================
+mainInput
+handle player input for the player's origin point and angle.
+================
+*/
+void() mainInput =
+{
+    // set the player's angle
+    entityPlayer.fieldAngle = inputAngle - '0 180 0';
+
+    // set the view, handle player movement, begin a trace and set the active tile
+    viewSet   (entityPlayer.fieldAngle);
+    mainMove  (inputMove.x, fieldSpeed.x, (fieldActive & activeModifier) ? consoleVariable(dlSpeedA, 4) : consoleVariable(dlSpeedB, 2), viewX);
+    mainMove  (inputMove.y, fieldSpeed.y, (fieldActive & activeModifier) ? consoleVariable(dlSpeedA, 4) : consoleVariable(dlSpeedB, 2), viewY);
+    mainMove  (inputMove.z, fieldSpeed.z, (fieldActive & activeModifier) ? consoleVariable(dlSpeedA, 4) : consoleVariable(dlSpeedB, 2));
+    traceBegin(entityPlayer.fieldPoint, entityPlayer.fieldPoint + viewX * 8192, 0, entityPlayer);
+
+    // if not currently locking in to a tile, and not currently in the side bar, and not in top down view, set the current tile we're looking at as the active tile
+    if (!(fieldActive & activeTileLock) && !(fieldActive & activeView) && !sideActive)
+        entityMain = traceEntity;
+};
+
+/*
+================
+mainEvent
+handle player event for the side bar and some tile stuff.
+================
+*/
+integer(integer type, decimal x, decimal y) mainEvent =
+{
+    // the engine will just not stop eating the escape key, so we force it to always yield to the toggle command.
+    if (type == eventKeyBegin && x == eventKeyEscape)
+    {
+        consoleCommand("dlToggle; dlSide sideMain\n");
+        return 1;
+    }
+
+    // adjust tile height with the mouse movement if we're locking in to a tile.
+    if (type == eventMouseDelta && fieldActive & activeTileLock)
+    {
+        entityMain.fieldPoint.z -= y * ((fieldActive & activeModifier) ? consoleVariable(dlTileLockA, 1) : consoleVariable(dlTileLockB, 0.05)) * 5.5;
+        return 1;
+    }
+
+    if (type == eventKeyBegin && entityMain)
+    {
+
+        #define eventKeyEnter K_ENTER
+
+        switch (x)
+        {
+            case eventKeyEnter:
+                if (!(fieldActive & activeTileType))
+                {
+                    fieldActive (+) activeTileLock;
+                    fieldActive (+) activeTileType;
+                    fieldNumber = "...";
+                    break;
+                }
+                fieldActive (-) activeTileLock;
+                fieldActive (-) activeTileType;
+                fieldNumber = "";
+                break;
+            case eventKeyBackSpace:
+                if (fieldNumber == "...")
+                    break;
+
+                fieldNumber = stringDivide(fieldNumber, 0, -2);
+
+                for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+                    if (loop.fieldName == "tile" && loop.fieldTileMark || loop == entityMain)
+                        loop.fieldPoint.z = stringDecimal(fieldNumber);
+
+                if (fieldNumber == "")
+                    fieldNumber = "...";
+                break;
+        }
+
+        switch (y)
+        {
+            case 46:
+            case 48..57:
+                fieldActive (+) activeTileLock;
+                fieldActive (+) activeTileType;
+                fieldNumber = (fieldNumber == "...") ? characterString(y) : stringFormat ("%s%s", fieldNumber, characterString(y));
+                for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+                    if (loop.fieldName == "tile" && loop.fieldTileMark || loop == entityMain)
+                        loop.fieldPoint.z = stringDecimal(fieldNumber) * 5.5;
+                break;
+        }
+    }
+
+    // update the cursor position for the side bar.
+    if (type == eventMouseAbsolute)
+    {
+        sideCursor.x = x;
+        sideCursor.y = y;
+        return 1;
+    }
+
+    // send event to a side bar object.
+    if (sideActive && entitySide)
+    {
+        entitySide.sideEvent(type, x, y);
+        return 1;
+    }
+
+    return 0;
+};
+
+/*
+================
+mainCommand
+handle a command from the player.
+================
+*/
+integer(string command) mainCommand =
+{
+    tokenSet(command, " ");
+
+    switch (tokenGet(0))
+    {
+        case "dataSave":
+            dataSave(stringDivide(command, 9, -1));
+            windowTitle(stringFormat("Daggerlicious - %s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "dataLoad":
+            dataWipe();
+            dataLoad(stringDivide(command, 9, -1));
+            windowTitle(stringFormat("Daggerlicious - %s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "dlTileIncrease":
+            for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+                if (loop.fieldName == "tile" && loop.fieldTileMark || loop == entityMain)
+                    loop.fieldPoint.z += ((fieldActive & activeModifier) ? consoleVariable(dlTileMoveA, 2) : consoleVariable(dlTileMoveB, 0.05)) * 5.5;
+            windowTitle(stringFormat("Daggerlicious - *%s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "dlTileDecrease":
+            for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+                if (loop.fieldName == "tile" && loop.fieldTileMark || loop == entityMain)
+                    loop.fieldPoint.z -= ((fieldActive & activeModifier) ? consoleVariable(dlTileMoveA, 2) : consoleVariable(dlTileMoveB, 0.05)) * 5.5;
+            windowTitle(stringFormat("Daggerlicious - *%s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "dlTileGet":
+        if (entityMain)
+            fieldBuffer = entityMain.fieldPoint.z;
+            windowTitle(stringFormat("Daggerlicious - *%s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "dlTileSet":
+        if (entityMain)
+            entityMain.fieldPoint.z = fieldBuffer;
+            windowTitle(stringFormat("Daggerlicious - *%s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "dlMarkA":
+            if (entityMain)
+                entityMain.fieldTileMark = !entityMain.fieldTileMark;
+            return 1;
+        case "dlMarkB":
+            for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+                loop.fieldTileMark = 1;
+            return 1;
+        case "dlMarkC":
+            for (entity loop = entityNext(world); loop; loop = entityNext(loop))
+                loop.fieldTileMark = 0;
+            return 1;
+        case "+dlTileLock":
+        if (entityMain)
+            fieldActive (+) activeTileLock;
+            windowTitle(stringFormat("Daggerlicious - *%s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "-dlTileLock":
+        if (entityMain)
+            fieldActive (-) activeTileLock;
+            windowTitle(stringFormat("Daggerlicious - *%s", consoleVariable(dlMapName, "")));
+            return 1;
+        case "+dlModifier":
+            fieldActive (+) activeModifier;
+            return 1;
+        case "-dlModifier":
+            fieldActive (-) activeModifier;
+            return 1;
+        case "+dlView":
+            fieldActive (+) activeView;
+            entityMain = world;
+            return 1;
+        case "-dlView":
+            fieldActive (-) activeView;
+            entityMain = world;
+            return 1;
+        case "dlSide":
+            for (sideObject loop = (sideObject)entityNext(world); loop; loop = (sideObject)entityNext(loop))
+                if (loop.fieldName == "frame")
+                    loop.sideHide();
+            entityMain = world;
+            functionDo(tokenGet(1));
+            return 1;
+        case "dlToggle":
+            if (sideActive)
+            {
+                for (sideObject loop = (sideObject)entityNext(world); loop; loop = (sideObject)entityNext(loop))
+                    if (loop.fieldName == "frame")
+                        loop.sideHide();
+            }
+
+            fieldActive = 0;
+            sideLock    = 0;
+            sideActive  = !sideActive;
+            cursorMode (sideActive);
+            cursorPoint([sceneGet(propertySizeX) / 2, sceneGet(propertySizeY) / 2]);
+            return 1;
+    }
+
+    return 0;
+};

@@ -1,0 +1,964 @@
+/*
+================
+sideObject
+the most basic object. show, hide, or handle an event.
+================
+*/
+class sideObject
+{
+    vector     sidePoint;
+    vector     sideSize;
+    sideObject sideAbove;
+    sideObject sideBelow;
+
+    virtual void() sideShow =
+    {
+        // if the mouse is over us and another object isn't currently locking up our mouse, make us the active object
+        if ((sideCursor.x > sidePoint.x && sideCursor.x < sidePoint.x + (sceneGet(propertySizeX) / 2) - sideSize.x) && (sideCursor.y > sidePoint.y && sideCursor.y < sidePoint.y + sideSize.y) && !sideLock)
+            entitySide = self;
+    };
+    virtual void() sideHide =
+    {
+        entityClose(self);
+    };
+    virtual void(integer type, decimal x, decimal y) sideEvent = {};
+};
+
+/*
+================
+sideFrame
+responsible for drawing each and every object bound to it. can also add a scroll bar if it cannot display every object.
+================
+*/
+class sideFrame : sideObject
+{
+    integer sideCount;
+    decimal sideShift;
+
+    virtual void() sideShow =
+    {
+        decimal scrollView  = (sideCount * 16) - sideSize.y;
+        decimal scrollSize  = sideSize.y * (sideSize.y / (sideCount * 16));
+        decimal scrollMove  = (sideSize.y - scrollSize) * (sideShift / scrollView);
+        decimal scrollShift = 0;
+        decimal scrollAlpha = 0.1;
+
+        // if the mouse is over us and another object isn't currently locking up our mouse, make us the active object
+        if ((sideCursor.x > sidePoint.x + (sceneGet(propertySizeX) / 2) - sideSize.x - 8 && sideCursor.x < sidePoint.x + (sceneGet(propertySizeX) / 2) - sideSize.x - 8 + 8)
+         && (sideCursor.y > sidePoint.y && sideCursor.y < sidePoint.y + sideSize.y) && !sideLock)
+            entitySide = self;
+
+        // if we are the active object
+        if (entitySide == self)
+            scrollAlpha = 0.5;
+
+        // if we are the active object and we are the lock up object
+        if (entitySide == self && sideLock)
+        {
+            // get the percentage of where the cursor is in relative to the size of the scroll bar
+            scrollShift = (sideCursor.y - (sidePoint.y)) / ((sidePoint.y + sideSize.y) - (sidePoint.y));
+            scrollAlpha = 1;
+
+            // bind the percentage to 0 or 1, then calculate the shift by the percentage
+            scrollShift = decimalBound(0, scrollShift, 1);
+            sideShift   = scrollView * scrollShift;
+        }
+
+        // if a size was given
+        if (sideSize)
+        {
+            // draw background
+            drawLine(sidePoint, [(sceneGet(propertySizeX) / 2) - sideSize.x - 16, sideSize.y], '1 1 1', 0.1, 0);
+
+            // if we can't show every object, draw a scroll bar
+            if (scrollView > 0)
+                drawLine(sidePoint + [(sceneGet(propertySizeX) / 2) - sideSize.x - 8, scrollMove], [8, scrollSize], '1 1 1', scrollAlpha, 0);
+
+            // begin scissor test
+            clipBegin(sidePoint.x, sidePoint.y, (sceneGet(propertySizeX) / 2) - sideSize.x, sideSize.y);
+
+            // run through every object
+            for (sideObject loop = sideBelow; loop; loop = loop.sideBelow)
+            {
+                loop.sidePoint.y -= sideShift;
+                // only draw if they are within view, otherwise you'll be able to interact with an object even if hidden from view
+                if (loop.sidePoint.y - sidePoint.y < sideSize.y)
+                    loop.sideShow();
+                loop.sidePoint.y += sideShift;
+            }
+
+            // close scissor test
+            clipClose();
+        }
+
+        // if a size was not given, simply run through every object
+        if (!sideSize)
+            for (sideObject loop = sideBelow; loop; loop = loop.sideBelow)
+                loop.sideShow();
+    };
+
+    virtual void() sideHide =
+    {
+        // run through every object
+        for (sideObject loop = sideBelow; loop; loop = loop.sideBelow)
+            loop.sideHide();
+
+        // remove self
+        entityClose(self);
+    };
+
+    virtual void(integer type, decimal x, decimal y) sideEvent =
+    {
+        decimal scrollView = (sideCount * 16) - sideSize.y;
+
+        // don't do anything if every object is within view
+        if (scrollView < 0)
+            return;
+
+        // lock the object
+        switch (type)
+        {
+            case eventKeyBegin:
+                if (x == eventKeyMouseA)
+                    sideLock = 1;
+                break;
+            case eventKeyClose:
+                if (x == eventKeyMouseA)
+                    sideLock = 0;
+                break;
+        }
+
+        // increase or decrease shift
+        switch (x)
+        {
+            case eventKeyWheelA:
+                if (type == eventKeyBegin)
+                    sideShift -= 16;
+                break;
+            case eventKeyWheelB:
+            if (type == eventKeyBegin)
+                    sideShift += 16;
+                break;
+        }
+
+        // bind from to 0 to max scroll view
+        sideShift = decimalBound(0, sideShift, scrollView);
+    };
+
+    virtual void(sideObject pool) sideLink =
+    {
+        // run through every object
+        for (sideObject loop = self; loop; loop = loop.sideBelow)
+        {
+            // if object has no below object
+            if (!loop.sideBelow)
+            {
+                // attach to one another and make their position relative to the frame's
+                loop.sideBelow = pool;
+                pool.sideAbove = loop;
+                pool.sidePoint = pool.sidePoint + sidePoint;
+                sideCount++;
+                break;
+            }
+        }
+    };
+
+    virtual void() sideFrame =
+    {
+        // the main draw loop will look for any object with this name to draw it
+        fieldName = "frame";
+    };
+};
+
+/*
+================
+sideText
+a basic text object. will just display a given string.
+================
+*/
+class sideText : sideObject
+{
+    string sideText;
+
+    virtual void() sideShow =
+    {
+        // draw text...duh.
+        drawText(sidePoint, sideText, '16 16', '1 1 1', 1, 0);
+    };
+};
+
+/*
+================
+sideButton
+clicky. basically a text object but interactable.
+================
+*/
+class sideButton : sideObject
+{
+    string sideText;
+    string sideButton;
+
+    virtual void() sideShow =
+    {
+        // run basic logic
+        super::sideShow();
+
+        // draw text
+        drawText(sidePoint, sideText, '16 16', (entitySide == self) ? '1 1 1' : '0.5 0.5 0.5', 1, 0);
+    };
+
+    virtual void(integer type, decimal x, decimal y) sideEvent =
+    {
+        // execute command
+        if (type == eventKeyBegin && x == eventKeyMouseA)
+            consoleCommand(sideButton);
+    };
+};
+
+/*
+================
+sideEnemy
+a side object for an enemy. will allow it to directly modify an enemy's type and delay.
+================
+*/
+class sideEnemy : sideObject
+{
+    sideFrame sideFrame;
+    entity    sideEnemy;
+    integer   sideLoop;
+
+    virtual void() sideShow =
+    {
+        string  enemyType[] = {"SQUID I", "SQUID II", "SQUID III", "LEVIATHAN", "CENTIPEDE", "GIGAPEDE", "GHOSTPEDE", "SPIDER I", "SPIDER II", "THORN", "EMPTY"};
+        decimal enemyTime   = sideEnemy.fieldTime;
+        integer enemyLoop   = 0;
+        integer enemyMode   = 0;
+
+        for (sideEnemy loop = sideAbove; loop; loop = loop.sideAbove)
+            enemyTime += loop.sideEnemy.fieldTime;
+
+        if (sideEnemy.fieldType == 10)
+        {
+            for (sideEnemy loop = sideBelow; loop; loop = loop.sideBelow)
+                if (loop.sideEnemy.fieldType == 10)
+                    enemyLoop = 1;
+
+            sideLoop = !enemyLoop;
+
+            for (sideEnemy loop = sideBelow; loop; loop = loop.sideBelow)
+                loop.sideLoop = sideLoop;
+        }
+
+        // run basic logic
+        super::sideShow();
+
+        // select type
+        if ((sideCursor.x > sidePoint.x + 62 && sideCursor.x < sidePoint.x + 62 + ((sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56))
+        &&  (sideCursor.y > sidePoint.y && sideCursor.y < sidePoint.y + 16))
+            enemyMode = 1;
+
+        // select time
+        if ((sideCursor.x > sidePoint.x + 62 + ((sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56) && sideCursor.x < (sidePoint.x + 62 + ((sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56)) + 66)
+        &&  (sideCursor.y > sidePoint.y && sideCursor.y < sidePoint.y + 16))
+            enemyMode = 2;
+
+        // draw relative + absolute time background
+        drawLine(sidePoint + '-4 0',  '66 16', '1 1 1', 0.1, 0);
+        drawLine(sidePoint + '62 0',  [(sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56, 16], '1 1 1', (sideLoop) ? 0.1 : 0, 0);
+        drawLine(sidePoint + '62 0' + [(sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56, 0],  '66 16', '1 1 1', 0.1, 0);
+
+        // draw relative + absolute time text
+        drawText(sidePoint, stringFormat("%.4f", enemyTime), '16 16', '1 1 1', 1, 0);
+        drawText(sidePoint + [(sceneGet(propertySizeX) / 2) - sideSize.x - 62, 0], stringFormat("%.4f", sideEnemy.fieldTime), '16 16', (enemyMode == 2) ? '1 1 1' : '0.5 0.5 0.5', 1, 0);
+
+        // draw enemy type
+        drawText(sidePoint + '66 0', enemyType[sideEnemy.fieldType], '16 16', (enemyMode == 1) ? '1 1 1' : '0.5 0.5 0.5', 1, 0);
+
+        // reset loop highlight
+        sideLoop = 0;
+    };
+
+    virtual void() sideHide =
+    {
+        // only if we are the top element
+        if (sideAbove.fieldName == "frame")
+        {
+            // run through every object below us
+            for (sideEnemy loop = self; loop; loop = loop.sideBelow)
+            {
+                // create a replica of the enemy but in the side bar order
+                entity enemy    = entityBegin();
+                enemy.fieldName = "enemy";
+                enemy.fieldType = loop.sideEnemy.fieldType;
+                enemy.fieldTime = loop.sideEnemy.fieldTime;
+                // destroy the enemy and object
+                entityClose(loop.sideEnemy);
+                entityClose(loop);
+            }
+        }
+    };
+
+    virtual void(integer type, decimal x, decimal y) sideEvent =
+    {
+        if (type == eventKeyBegin)
+        {
+            integer enemyMode = 0;
+
+            // select type
+            if ((sideCursor.x > sidePoint.x + 62 && sideCursor.x < sidePoint.x + 62 + ((sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56))
+            &&  (sideCursor.y > sidePoint.y - self.sideFrame.sideShift && sideCursor.y < (sidePoint.y - self.sideFrame.sideShift ) + 16))
+                enemyMode = 1;
+
+            // select time
+            if ((sideCursor.x > sidePoint.x + 62 + ((sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56) && sideCursor.x < (sidePoint.x + 62 + ((sceneGet(propertySizeX) / 2) - sideSize.x * 3 - 56)) + 66)
+            &&  (sideCursor.y > (sidePoint.y - self.sideFrame.sideShift ) && sideCursor.y < (sidePoint.y - self.sideFrame.sideShift ) + 16))
+                enemyMode = 2;
+
+            switch (x)
+            {
+                // space case -- go to top of list
+                case eventKeySpace:
+                    self.sideFrame.sideShift = 0;
+                    break;
+                // control case -- go to top of list
+                case eventKeyControlA:
+                case eventKeyControlB:
+                    self.sideFrame.sideShift = (self.sideFrame.sideCount * 16) - self.sideFrame.sideSize.y;
+                    break;
+                // l-click case -- add enemy to bottom of current object
+                case eventKeyMouseA:
+                    // spawn a duplicate of the current entity
+                    entity enemy    = entityBegin();
+                    enemy.fieldName = "enemy";
+                    enemy.fieldType = sideEnemy.fieldType;
+                    enemy.fieldTime = sideEnemy.fieldTime;
+                    sideEnemy ymene = entityBegin(sideEnemy, sidePoint: sidePoint, sideSize: [36, 16], sideFrame: self.sideFrame, sideEnemy: enemy);
+                    sideObject fles = sideBelow;
+
+                    self.sideBelow = ymene;
+
+                    if (fles)
+                        fles.sideAbove = ymene;
+
+                    ymene.sideAbove = self;
+                    ymene.sideBelow = fles;
+
+                    self.sideFrame.sideCount++;
+
+                    // run down the object list
+                    for (sideEnemy loop = sideBelow; loop; loop = loop.sideBelow)
+                        loop.sidePoint.y += 16;
+
+                    if (ymene.sidePoint.y >= self.sideFrame.sidePoint.y + self.sideFrame.sideSize.y)
+                        self.sideFrame.sideShift += 16;
+                    break;
+                // r-click case -- add enemy to bottom of list
+                case eventKeyMouseB:
+                    // spawn a duplicate of the current entity
+                    entity enemy    = entityBegin();
+                    enemy.fieldName = "enemy";
+                    enemy.fieldType = sideEnemy.fieldType;
+                    enemy.fieldTime = sideEnemy.fieldTime;
+
+                    // run down the object list
+                    for (integer a = 0, sideEnemy loop = self; loop; loop = loop.sideBelow, a++)
+                    {
+                        // nothing below
+                        if (!loop.sideBelow)
+                        {
+                            // attach the new object + enemy, and adjust view to it
+                            self.sideFrame.sideLink(entityBegin(sideEnemy, sidePoint: [4, (loop.sidePoint.y - sideFrame.sidePoint.y) + 16], sideSize: [36, 16], sideFrame: self.sideFrame, sideEnemy: enemy));
+
+                            // scroll down if it's out of view
+                            if (self.sideFrame.sideCount > self.sideFrame.sideSize.y / 16)
+                                self.sideFrame.sideShift = (self.sideFrame.sideCount * 16) - self.sideFrame.sideSize.y;
+                            break;
+                        }
+                    }
+                    break;
+                // m-click case -- remove enemy
+                case eventKeyMouseC:
+                    if (self.sideFrame.sideCount > 1)
+                    {
+                        // relink the object above us, if any
+                        if (sideAbove)
+                            sideAbove.sideBelow = sideBelow;
+                        // relink the object below us, if any
+                        if (sideBelow)
+                            sideBelow.sideAbove = sideAbove;
+                        // shift every object below up
+                        for (sideEnemy loop = self; loop; loop = loop.sideBelow)
+                            loop.sidePoint.y -= 16;
+
+                        // decrease the object count
+                        self.sideFrame.sideCount--;
+
+                        // shift view
+                        if (self.sideFrame.sideShift)
+                            self.sideFrame.sideShift -= 16;
+
+                        // remove both this object and the enemy entity
+                        entityClose(sideEnemy);
+                        entityClose(self);
+                        break;
+                    }
+
+                    self.sideEnemy.fieldType = 10;
+                    self.sideEnemy.fieldTime = 0;
+                    break;
+                case eventKeyMoveA:
+                    if (enemyMode == 1)
+                    {
+                        // decrease type
+                        self.sideEnemy.fieldType -= 1;
+
+                        if (self.sideEnemy.fieldType < 0)
+                            self.sideEnemy.fieldType = 10;
+                        break;
+                    }
+                    if (enemyMode == 2)
+                    {
+                        // decrease time
+                        self.sideEnemy.fieldTime -= 1;
+
+                        if (self.sideEnemy.fieldTime < 0)
+                            self.sideEnemy.fieldTime = 0;
+                    }
+                    break;
+                case eventKeyMoveB:
+                    if (enemyMode == 1)
+                    {
+                        // increase type
+                        self.sideEnemy.fieldType += 1;
+
+                        if (self.sideEnemy.fieldType > 10)
+                            self.sideEnemy.fieldType = 0;
+                        break;
+                    }
+                    if (enemyMode == 2)
+                        // increase time
+                        self.sideEnemy.fieldTime += 1;
+                    break;
+                // backspace case -- wipe the enemy time
+                case eventKeyBackSpace:
+                    if (enemyMode == 2)
+                        self.sideEnemy.fieldTime = 0;
+                        break;
+                case eventKeyMoveC:
+                    // do not shift object up if it's a frame.
+                    if (sideAbove.fieldName != "frame")
+                    {
+                        vector     swapPoint = sideAbove.sidePoint;
+                        sideObject swapAbove = sideAbove.sideAbove;
+                        sideObject swapBelow = sideAbove;
+
+                        // we need to swap the point in the list with whatever is above us.
+                        sideAbove.sidePoint = sidePoint;
+                        sidePoint           = swapPoint;
+
+                        // 1 [2] {3} (4) >5<, where >< is what is below us, () is us, {} is what is above us, and [] is what is above our above object
+                        // [2]'s below object should stop being {3}, so we point it to us
+                        // {3}'s above object should stop being [2], so we point it to us
+                        sideAbove.sideAbove.sideBelow = self;
+                        sideAbove.sideAbove           = self;
+
+                        // 1 [2] {3} (4) >5<
+                        // {3}'s below object should stop being us, so we point it to >5<
+                        // >5<'s above object should stop being us, so we point it to {3}
+                        sideAbove.sideBelow = sideBelow;
+
+                        // only if we have anything at all below us.
+                        if (sideBelow)
+                            sideBelow.sideAbove = sideAbove;
+
+                        // 1 [2] {3} (4) >5<
+                        // our above object should stop being {3}, and become [2]
+                        // our below object should stop being >5<, and become {3}
+                        sideAbove = swapAbove;
+                        sideBelow = swapBelow;
+
+                        // went out of view, follow us
+                        if (self.sideFrame.sideShift)
+                            self.sideFrame.sideShift -= 16;
+
+                        // shift the cursor to follow us
+                        cursorPoint(sidePoint - [0, self.sideFrame.sideShift] + '96 8');
+                    }
+                    break;
+                case eventKeyMoveD:
+                    // do not shift object up if it's a frame.
+                    if (sideBelow)
+                    {
+                        // the logic is basically the same as moving an object + enemy up. so go read that.
+                        swapPoint = sideBelow.sidePoint;
+                        swapAbove = sideBelow;
+                        swapBelow = sideBelow.sideBelow;
+
+                        sideBelow.sidePoint = sidePoint;
+                        sidePoint           = swapPoint;
+
+                        if (sideBelow.sideBelow)
+                            sideBelow.sideBelow.sideAbove = self;
+                        sideBelow.sideBelow = self;
+
+                        sideBelow.sideAbove = sideAbove;
+                        sideAbove.sideBelow = sideBelow;
+
+                        sideBelow = swapBelow;
+                        sideAbove = swapAbove;
+
+                        if (sidePoint.y >= self.sideFrame.sidePoint.y + self.sideFrame.sideSize.y)
+                            self.sideFrame.sideShift += 16;
+
+                        cursorPoint(sidePoint - [0, self.sideFrame.sideShift] + '96 8');
+                    }
+                    break;
+            }
+
+            // any other input will go here.
+            if (y >= 48 && y <= 57 || y == 45)
+            {
+                if (enemyMode == 1)
+                {
+                    integer enemyType = 10;
+
+                    switch (y)
+                    {
+                        // 1 - 9 case -- decrement by 1 to adjust
+                        case 49..57:
+                            enemyType = stringInteger(characterString(y)) - 1;
+                            break;
+                        // 0 case -- treat as type 9
+                        case 48:
+                            enemyType = 9;
+                            break;
+                    }
+
+                    // set the final type
+                    self.sideEnemy.fieldType = enemyType;
+                }
+                if (enemyMode == 2)
+                {
+                    // attach the input to the right of the last number
+                    self.sideEnemy.fieldTime = stringDecimal(stringFormat("%i%s", (integer)self.sideEnemy.fieldTime, characterString(y)));
+
+                    // bind to 5000 so that absolute time doesn't overflow
+                    if (self.sideEnemy.fieldTime > 5000)
+                        self.sideEnemy.fieldTime = 5000;
+                }
+            }
+        }
+    };
+};
+
+/*
+================
+sideEntry
+a text entry field. can also be made to accept numeric input only.
+================
+*/
+class sideEntry : sideObject
+{
+    integer sideNumeric;
+    integer sideIndex;
+    string  sideValue;
+
+    virtual void() sideShow =
+    {
+        decimal caretOffSet = 0;
+
+        // run basic logic
+        super::sideShow();
+
+        // calculate how far to the right should the caret be depending on what text came before
+        for (integer a = 0; a < sideIndex; a++)
+            caretOffSet += stringOffSet(stringDivide(getConsoleVariableB(sideValue), a, 1), 0, '16 16');
+
+        // draw background, value, and index
+        drawLine(sidePoint, [(sceneGet(propertySizeX) / 2) - sideSize.x, sideSize.y], '1 1 1', 0.1, 0);
+        drawText(sidePoint + '4 0', getConsoleVariableB(sideValue),  '16 16', '1 1 1', (entitySide == self) ? 1 : 0.5, 0);
+        drawText(sidePoint + '4 0' + [caretOffSet, 0], "|",          '16 16', '1 1 1', (entitySide == self) ? 1 : 0.5, 0);
+    };
+
+    virtual void(integer type, decimal x, decimal y) sideEvent =
+    {
+        if (type == eventKeyBegin)
+        {
+            switch (x)
+            {
+                // mouse case -- find where in the string did the player click and put the caret there
+                case eventKeyMouseA:
+                    decimal entryShift = 0;
+                    entryShift = (sideCursor.x - (sidePoint.x)) / ((sidePoint.x + stringOffSet(getConsoleVariableB(sideValue), 0, '16 16')) - (sidePoint.x));
+                    entryShift = decimalBound(0, entryShift, 1);
+                    entryShift = stringLength(getConsoleVariableB(sideValue)) * entryShift;
+                    sideIndex  = entryShift;
+                    break;
+                // l-arrow case -- move the index back
+                case eventKeyArrowA:
+                    if (sideIndex > 0)
+                        sideIndex--;
+                    break;
+                // r-arrow case -- move the index forward
+                case eventKeyArrowB:
+                    if (sideIndex < stringLength(getConsoleVariableB(sideValue)))
+                        sideIndex++;
+                    break;
+                // backspace case -- delete letter to the left of the caret
+                case eventKeyBackSpace:
+                    if (sideIndex)
+                    {
+                        setConsoleVariable(sideValue, stringFormat("%s%s",
+                        stringDivide(getConsoleVariableB(sideValue), 0, sideIndex - 1),
+                        stringDivide(getConsoleVariableB(sideValue), sideIndex, -1)));
+                        sideIndex--;
+                    }
+                    break;
+            }
+
+            // any other input will go here.
+            if (y >= ' ')
+            {
+                // if this entry object can only take 0-9-., check if the character is within that range
+                if (sideNumeric && (y >= 48 && y <= 57 || y == 45 || y == 46) || !sideNumeric)
+                {
+                    setConsoleVariable(sideValue, stringFormat("%s%s%s",
+                    stringDivide   (getConsoleVariableB(sideValue), 0, sideIndex),
+                    characterString(y),
+                    stringDivide   (getConsoleVariableB(sideValue), sideIndex, -1)));
+                    sideIndex++;
+                }
+            }
+        }
+    };
+
+    virtual void() sideEntry =
+    {
+        // set the index to be the same length as the variable
+        sideIndex = stringLength(getConsoleVariableB(sideValue));
+    };
+};
+
+/*
+================
+sideAction
+bind a key to an action, like +forward.
+================
+*/
+class sideAction : sideObject
+{
+    string  sideAction;
+
+    #define actionGet findkeysforcommandex
+    #define actionSet setkeybind
+
+    virtual void() sideShow =
+    {
+        string actionString = actionGet(sideAction);
+
+        // run basic logic
+        super::sideShow();
+
+        if (actionString == "")
+            actionString = "<NO KEY FOUND>";
+
+        if (entitySide == self && sideLock)
+            actionString = "...";
+
+        drawLine(sidePoint, [(sceneGet(propertySizeX) / 2) - sideSize.x, sideSize.y], '1 1 1', 0.1, 0);
+        drawText(sidePoint + '4 0', actionString, '12 12', (entitySide == self) ? '1 1 1' : '0.5 0.5 0.5', 1, 0);
+    };
+
+    virtual void(integer type, decimal x, decimal y) sideEvent =
+    {
+        if (type == eventKeyBegin && sideLock)
+        {
+            if (actionGet(sideAction) != "")
+                consoleCommand(stringFormat("unbind %s\n", actionGet(sideAction)));
+
+            actionSet(x, sideAction);
+            sideLock = 0;
+        }
+
+        if (type == eventKeyBegin && x == eventKeyMouseA && !sideLock)
+            sideLock = 1;
+    };
+};
+
+/*
+================
+sideView
+a map overview, complete with a shrink preview, because why not?
+================
+*/
+class sideView : sideObject
+{
+    virtual void() sideShow =
+    {
+        // set render target
+        sceneSet(propertyRender, "sideView", -1, '102 102');
+
+        for (integer a = 0, entity loop = entityNext(world); loop; loop = entityNext(loop))
+            if (loop.fieldName == "tile")
+            {
+                vector tileColor = '0 0 1';
+
+                // instant shrink
+                if (loop.fieldPoint.z / 5.5 < -1.0)
+                    tileColor = '0 1 0';
+
+                // void
+                if (loop.fieldPoint.z / 5.5 < -1.1)
+                    tileColor = '1 0 0';
+
+                // draw the tile
+                drawLine('0 101' + [2 * (a / 51i), -2 * (a % 51i)], '2 2', tileColor, 1, 0);
+                a++;
+            }
+
+        // reset render target
+        sceneSet(propertyRender, (string)__NULL__);
+
+        // draw the actual map
+        getSkin     ("sideViewRender", "{\n{\nmap $rt:sideView\nrgbGen Vertex\n}\n}");
+        drawRotation(sidePoint, '-51 -51', '51 51', "sideViewRender", '1 1 1', 1, 90);
+
+        // draw shrink begin
+        drawIcon    (sidePoint - '1 0' - [consoleVariable(dlMapShrinkBeginRadius, 0) / 2, consoleVariable(dlMapShrinkBeginRadius, 0) / 2],
+                    "vfx/circle.png",
+                    [consoleVariable(dlMapShrinkBeginRadius, 0), consoleVariable(dlMapShrinkBeginRadius, 0)],
+                    '1 1 1', 1, 0);
+
+        // draw shrink close
+        drawIcon    (sidePoint - '1 0' - [consoleVariable(dlMapShrinkCloseRadius, 0) / 2, consoleVariable(dlMapShrinkCloseRadius, 0) / 2],
+                    "vfx/circle.png",
+                    [consoleVariable(dlMapShrinkCloseRadius, 0), consoleVariable(dlMapShrinkCloseRadius, 0)],
+                    '1 1 1', 1, 0);
+    };
+};
+
+/*
+================
+sideHelp
+because this is getting out of hand, and i don't expect people to read the README file to know how to use this damn thing.
+================
+*/
+class sideHelp : sideObject
+{
+    vector sideHelp;
+    string sideText;
+
+    virtual void() sideShow =
+    {
+        // run basic logic
+        super::sideShow();
+
+        // draw ? icon
+        drawText(sidePoint, "?", '16 16', (entitySide == self) ? '1 1 1' : '0.5 0.5 0.5', 1, 0);
+
+        // if hovering over
+        if (entitySide == self)
+        {
+            for (integer a = 0;;a++)
+            {
+                // tokenize by | (e.g. hello~world|foo~bar would result in hello~world, foo~bar)
+                tokenSet(sideText, "|");
+
+                // don't continue if there's nothing
+                if (tokenGet(a) == "")
+                    break;
+
+                // tokenize by ~ (e.g. hello~world would result in hello, world)
+                tokenSet(tokenGet(a), "~");
+
+                // draw the background
+                drawLine(stringVector(tokenGet(0)), [stringOffSet(tokenGet(1), 1, '12 12'), 12], '0 0 0', 1, 0);
+                // draw the text
+                drawText(stringVector(tokenGet(0)), tokenGet(1), '12 12', '1 1 1', 1, 0);
+            }
+        }
+    };
+};
+
+/*
+================
+sideMain
+the main menu, so to speak.
+================
+*/
+void() sideMain =
+{
+    sideFrame frameMain = entityBegin(sideFrame, sidePoint: '8 8');
+    sideFrame frameSave = entityBegin(sideFrame, sidePoint: '8 60',  sideSize: '16 96');
+    sideFrame frameLoad = entityBegin(sideFrame, sidePoint: '8 196', sideSize: '16 96');
+    sideFrame frameHelp = entityBegin(sideFrame, sidePoint: '8 8');
+
+    frameMain.sideLink(entityBegin(sideButton, sidePoint: '0 0',   sideSize: '16 16', sideText:  "NEW MAP",       sideButton: "dlMapName survival; dataLoad _survival;  dlToggle\n"));
+    frameMain.sideLink(entityBegin(sideButton, sidePoint: '0 16',  sideSize: '16 16', sideText:  "SAVE MAP",      sideButton: "dataSave $dlMapName; dlToggle\n"                    ));
+    frameMain.sideLink(entityBegin(sideButton, sidePoint: '0 152', sideSize: '16 16', sideText:  "LOAD MAP",      sideButton: "dataLoad $dlMapName; dlToggle\n"                    ));
+    frameMain.sideLink(entityBegin(sideButton, sidePoint: '0 288', sideSize: '16 16', sideText:  "CONFIGURATION", sideButton: "dlSide sideConfiguration\n"                         ));
+    frameMain.sideLink(entityBegin(sideButton, sidePoint: '0 304', sideSize: '16 16', sideText:  "EXIT",          sideButton: "quit\n"));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '0 32',  sideSize: '16 16', sideNumeric: 0, sideValue: "dlMapName"));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '0 168', sideSize: '16 16', sideNumeric: 0, sideValue: "dlMapName"));
+
+    // search for every map within the data/ folder
+    search mapSearch = searchBegin("data/*", 1, 1);
+    for (integer a = 0;;a++)
+    {
+        string mapName = searchFile(mapSearch, a);
+
+        // if the map name is blank, break
+        if (mapName == "")
+            break;
+
+        // if the map name is the template map, continue
+        if (mapName == "data/_survival")
+            continue;
+
+        // cut off the data/ portion
+        mapName = stringDivide(mapName, 5, -1);
+        frameSave.sideLink(entityBegin(sideButton, sidePoint: '4 0' + [0, 16 * a], sideSize: '36 16', sideText: mapName, sideButton: stringFormat("dlMapName %s; dataSave %s; dlToggle\n", mapName, mapName)));
+        frameLoad.sideLink(entityBegin(sideButton, sidePoint: '4 0' + [0, 16 * a], sideSize: '36 16', sideText: mapName, sideButton: stringFormat("dlMapName %s; dataLoad %s; dlToggle\n", mapName, mapName)));
+    }
+    // close the search
+    searchClose(mapSearch);
+
+    frameHelp.sideLink(entityBegin(sideHelp,   sidePoint: '0 320', sideSize: '16 16',
+    sideText: "80 10  ~^9L-CLICK^d to create a map with the default survival map as the base."
+              "|80 26 ~^9L-CLICK^d to save the map with the name below."
+              "|12 42 ~^9TYPE^d in a map name."
+              "|12 62 ~^9L-CLICK^d on a map name to save the map."
+              "|80 162~^9L-CLICK^d to load the map with the name below."
+              "|12 178~^9TYPE^d in a map name."
+              "|12 198~^9L-CLICK^d on a map name to load the map."));
+};
+
+/*
+================
+sideMap
+show map information, like game mode or brightness.
+================
+*/
+void() sideMap =
+{
+    sideFrame frameView = entityBegin(sideFrame, sidePoint: '60 58');
+    sideFrame frameMain = entityBegin(sideFrame, sidePoint: '8 116', sideSize: '16 64');
+    sideFrame frameSide = entityBegin(sideFrame, sidePoint: '8 184', sideSize: '16 160');
+    sideFrame frameHelp = entityBegin(sideFrame, sidePoint: '8 348');
+
+    frameView.sideLink(entityBegin(sideView));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 0',   sideText: "GAME MODE"    ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 16',  sideText: "SHRINK BEGIN" ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 32',  sideText: "SHRINK CLOSE" ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 48',  sideText: "SHRINK RATE"  ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 64',  sideText: "BRIGHTNESS"   ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 80',  sideText: "RACE DAGGER X"));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 96',  sideText: "RACE DAGGER Y"));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 112', sideText: "INITIAL HAND" ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 128', sideText: "GEM OFFSET"   ));
+    frameMain.sideLink(entityBegin(sideText,  sidePoint: '4 144', sideText: "TIME OFFSET"  ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 0',   sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapGameMode"         ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 16',  sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapShrinkBeginRadius"));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 32',  sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapShrinkCloseRadius"));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 48',  sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapShrinkRate"       ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 64',  sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapBrightness"       ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 80',  sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapRaceDaggerX"      ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 96',  sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapRaceDaggerY"      ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 112', sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapInitialHand"      ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 128', sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapGemOffSet"        ));
+    frameMain.sideLink(entityBegin(sideEntry, sidePoint: '112 144', sideSize: '144 16', sideNumeric: 1, sideValue: "dlMapTimeOffSet"       ));
+
+    // yeah...bit of a hack.
+    frameMain.sideCount *= 0.5;
+
+    for (integer a = 0, entity loop = entityNext(world); loop; loop = entityNext(loop))
+    {
+        if (loop.fieldName == "enemy")
+        {
+            frameSide.sideLink(entityBegin(sideEnemy, sidePoint: [4, 16 * a], sideSize: [36, 16], sideFrame: frameSide, sideEnemy: loop));
+            a++;
+        }
+    }
+
+    frameHelp.sideLink(entityBegin(sideHelp,  sidePoint: '0 0', sideSize: '16 16',
+    sideText: "12  162~^9L-CLICK^d to add a spawn to the bottom of the current spawn."
+              "|12 174~^9R-CLICK^d to add a spawn to the bottom of the list."
+              "|12 186~^9M-CLICK^d to remove a spawn."
+              "|12 198~^9W^d to move a spawn up the list."
+              "|12 210~^9S^d to move a spawn down the list."
+              "|12 222~^9A^d on the spawn type to change to the previous spawn type."
+              "|12 234~^9D^d on the spawn type to change to the next spawn type."
+              "|12 246~^9A^d on the spawn time to decrease the spawn time."
+              "|12 258~^9D^d on the spawn time to increase the spawn time."
+              "|12 270~^9SPACE^d to go to the top of the list."
+              "|12 282~^9L-CONTROL/R-CONTROL^d to go to the bottom of the list."
+              "|12 294~^9TYPE^d on the spawn type to select the spawn type. (enter a value between 1-hyphen)"
+              "|12 306~^9TYPE^d on the spawn time to select the spawn time. (enter a value between 0-9)"
+              "|12 318~^9BACKSPACE^d on the spawn time to wipe the spawn time."
+              "|12 330~every spawn after the last empty spawn will become the loop wave."));
+};
+
+/*
+================
+sideConfiguration
+user configuration menu, for video/audio/input, etc.
+================
+*/
+void() sideConfiguration =
+{
+    sideFrame frameMain = entityBegin(sideFrame, sidePoint: '8 8', sideSize: '16 370');
+
+    frameMain.sideLink(entityBegin(sideButton, sidePoint: '4 0', sideSize: '36 16', sideText: "TOGGLE DISPLAY MODE",
+    sideButton: (getConsoleVariableA("vid_fullscreen") ? "vid_fullscreen 0; vid_restart; dlToggle\n" : "vid_fullscreen 2; vid_restart; dlToggle\n")));
+
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 16',  sideText: "MOVE FORWARD"         ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 32',  sideText: "MOVE BACK"            ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 48',  sideText: "MOVE LEFT"            ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 64',  sideText: "MOVE RIGHT"           ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 80',  sideText: "MOVE UP"              ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 96',  sideText: "MOVE DOWN"            ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 112', sideText: "TILE HEIGHT +"        ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 128', sideText: "TILE HEIGHT -"        ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 144', sideText: "GET TILE HEIGHT"      ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 160', sideText: "SET TILE HEIGHT"      ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 176', sideText: "TILE MARK/UNMARK"     ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 192', sideText: "ALL TILE MARK"        ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 208', sideText: "ALL TILE UNMARK"      ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 224', sideText: "TILE MOUSE"           ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 240', sideText: "MODIFIER"             ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 256', sideText: "TOP-DOWN VIEW"        ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 272', sideText: "MOVE SPEED (MOD)"     ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 288', sideText: "MOVE SPEED"           ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 304', sideText: "TILE HEIGHT +/- (MOD)"));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 320', sideText: "TILE HEIGHT +/-"      ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 336', sideText: "TILE MOUSE (MOD)"     ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 352', sideText: "TILE MOUSE"           ));
+    frameMain.sideLink(entityBegin(sideText, sidePoint: '4 368', sideText: "MOUSE SENSITIVITY"    ));
+
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 16',  sideSize: '184 16', sideAction: "+forward"                  ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 32',  sideSize: '184 16', sideAction: "+back"                     ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 48',  sideSize: '184 16', sideAction: "+moveleft"                 ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 64',  sideSize: '184 16', sideAction: "+moveright"                ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 80',  sideSize: '184 16', sideAction: "+moveup"                   ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 96',  sideSize: '184 16', sideAction: "+movedown"                 ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 112', sideSize: '184 16', sideAction: "dlTileIncrease"            ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 128', sideSize: '184 16', sideAction: "dlTileDecrease"            ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 144', sideSize: '184 16', sideAction: "dlTileGet"                 ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 160', sideSize: '184 16', sideAction: "dlTileSet"                 ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 176', sideSize: '184 16', sideAction: "dlMarkA"                   ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 192', sideSize: '184 16', sideAction: "dlMarkB"                   ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 208', sideSize: '184 16', sideAction: "dlMarkC"                   ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 224', sideSize: '184 16', sideAction: "+dlTileLock"               ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 240', sideSize: '184 16', sideAction: "+dlModifier"               ));
+    frameMain.sideLink(entityBegin(sideAction, sidePoint: '152 256', sideSize: '184 16', sideAction: "+dlView"                   ));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 272', sideSize: '184 16', sideNumeric: 1, sideValue: "dlSpeedA"   ));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 288', sideSize: '184 16', sideNumeric: 1, sideValue: "dlSpeedB"   ));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 304', sideSize: '184 16', sideNumeric: 1, sideValue: "dlTileMoveA"));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 320', sideSize: '184 16', sideNumeric: 1, sideValue: "dlTileMoveB"));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 336', sideSize: '184 16', sideNumeric: 1, sideValue: "dlTileLockA"));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 352', sideSize: '184 16', sideNumeric: 1, sideValue: "dlTileLockB"));
+    frameMain.sideLink(entityBegin(sideEntry,  sidePoint: '152 368', sideSize: '184 16', sideNumeric: 1, sideValue: "sensitivity"));
+
+    frameMain.sideCount *= 0.5;
+    frameMain.sideCount++;
+};
